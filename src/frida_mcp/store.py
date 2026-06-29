@@ -61,6 +61,8 @@ class ProjectStore:
         return [self._session_row(r) for r in rows]
 
     def set_session_state(self, session_id: int, state: str) -> None:
+        if state not in {"alive", "dead"}:
+            raise ValueError(f"invalid state: {state!r}")
         self.db.execute(
             "UPDATE sessions SET state = ? WHERE id = ?", (state, session_id)
         )

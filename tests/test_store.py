@@ -1,4 +1,4 @@
-import json
+import pytest
 from frida_mcp.store import ProjectStore
 
 
@@ -33,3 +33,10 @@ def test_directory_layout(tmp_path):
     ProjectStore(proj)
     assert (proj / "db.sqlite").exists()
     assert (proj / "traces").is_dir()
+
+
+def test_set_session_state_rejects_invalid(tmp_path):
+    store = ProjectStore(tmp_path / "proj.fmcp")
+    sid = store.create_session("t", "attach", None, None, "t")
+    with pytest.raises(ValueError):
+        store.set_session_state(sid, "crashed")
