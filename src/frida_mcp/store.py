@@ -28,6 +28,12 @@ class ProjectStore:
                 state TEXT NOT NULL DEFAULT 'alive',
                 created_at REAL NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS events_index (
+                session_id INTEGER NOT NULL,
+                line INTEGER NOT NULL,
+                type TEXT NOT NULL,
+                PRIMARY KEY (session_id, line)
+            );
             """
         )
         self.db.commit()
@@ -73,6 +79,66 @@ class ProjectStore:
         d = dict(row)
         d["args"] = json.loads(d["args"]) if d["args"] else []
         return d
+
+    def _trace_path(self, session_id: int) -> Path:
+        return self.root / "traces" / f"{session_id}.jsonl"
+
+    def append_event(self, session_id: int, event: dict) -> int:
+        line = self.count_events(session_id)
+        with self._trace_path(session_id).open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(event, ensure_ascii=False) + "\n")
+        self.db.execute(
+            "INSERT INTO events_index (session_id, line, type) VALUES (?,?,?)",
+            (session_id, line, str(event.get("type", ""))),
+        )
+        self.db.commit()
+        return line
+
+    def count_events(self, session_id: int, type_filter: str | None = None) -> int:
+        if type_filter is None:
+            row = self.db.execute(
+                "SELECT COUNT(*) AS c FROM events_index WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+        else:
+            row = self.db.execute(
+                "SELECT COUNT(*) AS c FROM events_index"
+                " WHERE session_id = ? AND type = ?",
+                (session_id, type_filter),
+            ).fetchone()
+        return int(row["c"])
+
+    def read_events(
+        self,
+        session_id: int,
+        offset: int = 0,
+        limit: int = 100,
+        type_filter: str | None = None,
+    ) -> list[dict]:
+        if type_filter is None:
+            rows = self.db.execute(
+                "SELECT line FROM events_index WHERE session_id = ?"
+                " ORDER BY line LIMIT ? OFFSET ?",
+                (session_id, limit, offset),
+            ).fetchall()
+        else:
+            rows = self.db.execute(
+                "SELECT line FROM events_index WHERE session_id = ? AND type = ?"
+                " ORDER BY line LIMIT ? OFFSET ?",
+                (session_id, type_filter, limit, offset),
+            ).fetchall()
+        wanted = {int(r["line"]) for r in rows}
+        if not wanted:
+            return []
+        out: list[dict] = []
+        path = self._trace_path(session_id)
+        with path.open("r", encoding="utf-8") as fh:
+            for line_no, raw in enumerate(fh):
+                if line_no in wanted:
+                    event = json.loads(raw)
+                    out.append({"line": line_no, "type": event.get("type", ""),
+                                "event": event})
+        return out
 
     def close(self) -> None:
         self.db.close()
