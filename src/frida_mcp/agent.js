@@ -101,7 +101,11 @@ rpc.exports = {
     }
   },
   addHook(targetExpr) {
-    return { id: installHook(targetExpr, resolveTarget(targetExpr)) };
+    try {
+      return { id: installHook(targetExpr, resolveTarget(targetExpr)) };
+    } catch (e) {
+      return { error: String(e) };
+    }
   },
   removeHook(id) {
     const h = hooks[id];
@@ -114,58 +118,83 @@ rpc.exports = {
     return Object.keys(hooks).map((id) => ({ id: Number(id), target: hooks[id].target }));
   },
   traceApi(pattern) {
-    const [mod, glob] = pattern.split('!');
-    const re = new RegExp('^' + glob.replace(/[.+^${}()|[\]\\]/g, '\\$&')
-      .replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
-    const ids = [];
-    for (const exp of Module.enumerateExports(mod)) {
-      if (exp.type === 'function' && re.test(exp.name)) {
-        if (ids.length >= 200) break;
-        ids.push(installHook(mod + '!' + exp.name, exp.address));
+    try {
+      const [mod, glob] = pattern.split('!');
+      if (!glob) return { ids: [], matched: 0 };
+      const re = new RegExp('^' + glob.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+        .replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
+      const ids = [];
+      for (const exp of Module.enumerateExports(mod)) {
+        if (exp.type === 'function' && re.test(exp.name)) {
+          if (ids.length >= 200) break;
+          ids.push(installHook(mod + '!' + exp.name, exp.address));
+        }
       }
+      return { ids, matched: ids.length };
+    } catch (e) {
+      return { error: String(e) };
     }
-    return { ids, matched: ids.length };
   },
   replaceFunction(targetExpr, code) {
-    const addr = resolveTarget(targetExpr);
-    const cb = (0, eval)('(' + code + ')');
-    const id = ++hookSeq;
-    const native = new NativeCallback(cb, 'pointer', ['pointer', 'pointer']);
-    Interceptor.replace(addr, native);
-    hooks[id] = { target: targetExpr, listener: { detach() { Interceptor.revert(addr); } } };
-    return { id };
+    try {
+      const addr = resolveTarget(targetExpr);
+      const cb = (0, eval)('(' + code + ')');
+      const id = ++hookSeq;
+      const native = new NativeCallback(cb, 'pointer', ['pointer', 'pointer']);
+      Interceptor.replace(addr, native);
+      hooks[id] = { target: targetExpr, listener: { detach() { Interceptor.revert(addr); } } };
+      return { id };
+    } catch (e) {
+      return { error: String(e) };
+    }
   },
   readMemory(addr, size) {
-    return { hex: hexdumpRaw(ptr(addr), size) };
+    try {
+      return { hex: hexdumpRaw(ptr(addr), size) };
+    } catch (e) {
+      return { error: String(e) };
+    }
   },
   writeMemory(addr, hex) {
-    const bytes = [];
-    for (let i = 0; i < hex.length; i += 2) bytes.push(parseInt(hex.substr(i, 2), 16));
-    ptr(addr).writeByteArray(bytes);
-    return { written: bytes.length };
+    try {
+      const bytes = [];
+      for (let i = 0; i < hex.length; i += 2) bytes.push(parseInt(hex.substr(i, 2), 16));
+      ptr(addr).writeByteArray(bytes);
+      return { written: bytes.length };
+    } catch (e) {
+      return { error: String(e) };
+    }
   },
   scanMemory(pattern, protection) {
-    const hits = [];
-    for (const range of Process.enumerateRanges(protection || 'r--')) {
-      if (hits.length >= 256) break;
-      const found = Memory.scanSync(range.base, range.size, pattern);
-      for (const m of found) {
+    try {
+      const hits = [];
+      for (const range of Process.enumerateRanges(protection || 'r--')) {
         if (hits.length >= 256) break;
-        hits.push(describePointer(m.address));
+        const found = Memory.scanSync(range.base, range.size, pattern);
+        for (const m of found) {
+          if (hits.length >= 256) break;
+          hits.push(describePointer(m.address));
+        }
       }
+      return hits;
+    } catch (e) {
+      return { error: String(e) };
     }
-    return hits;
   },
   disassemble(addr, count) {
-    const out = [];
-    let cur = ptr(addr);
-    for (let i = 0; i < count; i++) {
-      const insn = Instruction.parse(cur);
-      out.push({ address: cur.toString(), mnemonic: insn.mnemonic,
-                 opStr: insn.opStr, size: insn.size });
-      cur = insn.next;
+    try {
+      const out = [];
+      let cur = ptr(addr);
+      for (let i = 0; i < count; i++) {
+        const insn = Instruction.parse(cur);
+        out.push({ address: cur.toString(), mnemonic: insn.mnemonic,
+                   opStr: insn.opStr, size: insn.size });
+        cur = insn.next;
+      }
+      return out;
+    } catch (e) {
+      return { error: String(e) };
     }
-    return out;
   },
 };
 
