@@ -13,6 +13,7 @@ class ProjectStore:
         (self.root / "traces").mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(self.root / "db.sqlite")
         self.db.row_factory = sqlite3.Row
+        self._line_counts: dict[int, int] = {}
         self._create_schema()
 
     def _create_schema(self) -> None:
@@ -83,8 +84,18 @@ class ProjectStore:
     def _trace_path(self, session_id: int) -> Path:
         return self.root / "traces" / f"{session_id}.jsonl"
 
+    def _next_line(self, session_id: int) -> int:
+        if session_id not in self._line_counts:
+            path = self._trace_path(session_id)
+            if path.exists():
+                with path.open("r", encoding="utf-8") as fh:
+                    self._line_counts[session_id] = sum(1 for _ in fh)
+            else:
+                self._line_counts[session_id] = 0
+        return self._line_counts[session_id]
+
     def append_event(self, session_id: int, event: dict) -> int:
-        line = self.count_events(session_id)
+        line = self._next_line(session_id)
         with self._trace_path(session_id).open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(event, ensure_ascii=False) + "\n")
         self.db.execute(
@@ -92,6 +103,7 @@ class ProjectStore:
             (session_id, line, str(event.get("type", ""))),
         )
         self.db.commit()
+        self._line_counts[session_id] = line + 1
         return line
 
     def count_events(self, session_id: int, type_filter: str | None = None) -> int:

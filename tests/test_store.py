@@ -77,3 +77,13 @@ def test_events_survive_reopen(tmp_path):
     store.close()
     reopened = ProjectStore(proj)
     assert reopened.read_events(sid)[0]["event"]["x"] == 1
+
+
+def test_read_events_type_filter_with_pagination(tmp_path):
+    store = ProjectStore(tmp_path / "proj.fmcp")
+    sid = store.create_session("t", "attach", None, None, "t")
+    for i in range(6):
+        store.append_event(sid, {"type": "hook" if i % 2 == 0 else "repl", "i": i})
+    # hooks are at i=0,2,4 → skip the first, take one
+    page = store.read_events(sid, offset=1, limit=1, type_filter="hook")
+    assert [e["event"]["i"] for e in page] == [2]
