@@ -12,8 +12,7 @@ def build_server(manager: SessionManager) -> FastMCP:
     @mcp.tool()
     def list_processes() -> list[dict]:
         """List processes visible to the local Frida device."""
-        return [{"pid": p.pid, "name": p.name}
-                for p in manager.device.enumerate_processes()]
+        return manager.list_processes()
 
     @mcp.tool()
     def spawn(program: str, gated: bool = True) -> dict:

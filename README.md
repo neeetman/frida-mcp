@@ -21,8 +21,7 @@ Register it with your MCP client (stdio transport). All state lands in the
 
 - Process control: spawn (gated), attach, resume, detach, kill, list modules.
 - Memory: read, write, AOB/pattern scan, ranges.
-- Hooks: `add_hook`, `trace_api` (e.g. `kernel32!CreateFile*`), replace,
-  backtraces — all calls stream to disk.
+- Hooks: `add_hook`, `trace_api` (e.g. `kernel32!CreateFile*`) with backtraces — all calls stream to disk.
 - `eval_js`: run JS in a persistent in-process context; results come back as
   structured typed values you can feed straight into `read_memory`/`disassemble`.
 - `disassemble`: read N instructions from live memory (Capstone).

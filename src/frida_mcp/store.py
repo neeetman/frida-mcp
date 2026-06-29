@@ -65,7 +65,6 @@ class ProjectStore:
             );
             """
         )
-        self.db.commit()
 
     def create_session(
         self,
@@ -188,7 +187,7 @@ class ProjectStore:
                                     "event": event})
             return out
 
-    def add_instrument(self, session_id, kind, target_expr, source) -> int:
+    def add_instrument(self, session_id: int, kind: str, target_expr: str, source: str) -> int:
         with self._db_lock:
             cur = self.db.execute(
                 "INSERT INTO instruments (session_id, kind, target_expr, source)"
@@ -198,22 +197,23 @@ class ProjectStore:
             self.db.commit()
             return int(cur.lastrowid)
 
-    def list_instruments(self, session_id, active_only: bool = True) -> list[dict]:
+    def list_instruments(self, session_id: int, active_only: bool = True) -> list[dict]:
         with self._db_lock:
-            sql = "SELECT * FROM instruments WHERE session_id = ?"
+            sql = ("SELECT id, session_id, kind, target_expr, source, active"
+                   " FROM instruments WHERE session_id = ?")
             if active_only:
                 sql += " AND active = 1"
             sql += " ORDER BY id"
             return [dict(r) for r in self.db.execute(sql, (session_id,)).fetchall()]
 
-    def remove_instrument(self, instrument_id: int) -> None:
+    def remove_instrument(self, instrument_id: int) -> None:  # no-op on unknown id
         with self._db_lock:
             self.db.execute(
                 "UPDATE instruments SET active = 0 WHERE id = ?", (instrument_id,)
             )
             self.db.commit()
 
-    def add_repl(self, session_id, code, preview) -> int:
+    def add_repl(self, session_id: int, code: str, preview: str) -> int:
         with self._db_lock:
             cur = self.db.execute(
                 "INSERT INTO repl_history (session_id, code, preview, created_at)"
@@ -223,13 +223,13 @@ class ProjectStore:
             self.db.commit()
             return int(cur.lastrowid)
 
-    def list_repl(self, session_id) -> list[dict]:
+    def list_repl(self, session_id: int) -> list[dict]:
         with self._db_lock:
             return [dict(r) for r in self.db.execute(
                 "SELECT id, code, preview, created_at FROM repl_history"
                 " WHERE session_id = ? ORDER BY id", (session_id,)).fetchall()]
 
-    def add_note(self, session_id, text) -> int:
+    def add_note(self, session_id: int, text: str) -> int:
         with self._db_lock:
             cur = self.db.execute(
                 "INSERT INTO notes (session_id, text, created_at) VALUES (?,?,?)",
@@ -238,7 +238,7 @@ class ProjectStore:
             self.db.commit()
             return int(cur.lastrowid)
 
-    def list_notes(self, session_id) -> list[dict]:
+    def list_notes(self, session_id: int) -> list[dict]:
         with self._db_lock:
             return [dict(r) for r in self.db.execute(
                 "SELECT id, text, created_at FROM notes"

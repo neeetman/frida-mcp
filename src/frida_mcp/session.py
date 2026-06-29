@@ -66,7 +66,7 @@ class SessionManager:
             )
 
     def _pid_to_session_id(self, pid: int) -> int | None:
-        for sid, sess in self.live.items():
+        for sid, sess in list(self.live.items()):
             if sess.pid == pid:
                 return sid
         return None
@@ -124,6 +124,9 @@ class SessionManager:
             if inst["kind"] == "hook":
                 sess.exports.add_hook(inst["target_expr"])
                 reinstalled += 1
+            elif inst["kind"] == "trace":
+                sess.exports.trace_api(inst["target_expr"])
+                reinstalled += 1
         self.store.set_session_state(session_id, "alive")
         return {"session": self.store.get_session(session_id),
                 "status": "reattached", "reinstalled": reinstalled}
@@ -137,6 +140,8 @@ class SessionManager:
     def add_hook(self, session_id: int, target_expr: str) -> dict:
         sess = self._require_live(session_id)
         result = sess.exports.add_hook(target_expr)
+        if isinstance(result, dict) and "error" in result:
+            return result
         iid = self.store.add_instrument(session_id, "hook", target_expr, target_expr)
         return {"instrument_id": iid, "agent_hook_id": result["id"]}
 
@@ -162,6 +167,8 @@ class SessionManager:
     def trace_api(self, session_id: int, pattern: str) -> dict:
         sess = self._require_live(session_id)
         result = sess.exports.trace_api(pattern)
+        if isinstance(result, dict) and "error" in result:
+            return result
         self.store.add_instrument(session_id, "trace", pattern, pattern)
         return result
 
@@ -176,6 +183,10 @@ class SessionManager:
 
     def disassemble(self, session_id: int, address: str, count: int = 10) -> list[dict]:
         return self._require_live(session_id).exports.disassemble(address, count)
+
+    def list_processes(self) -> list[dict]:
+        return [{"pid": p.pid, "name": p.name}
+                for p in self.device.enumerate_processes()]
 
     def detach(self, session_id: int) -> None:
         sess = self.live.pop(session_id, None)

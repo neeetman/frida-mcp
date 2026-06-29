@@ -9,6 +9,12 @@ if (typeof Module.getExportByName !== 'function') {
   };
 }
 
+if (typeof Module.enumerateExports !== 'function') {
+  Module.enumerateExports = function (name) {
+    return Process.getModuleByName(name).enumerateExports();
+  };
+}
+
 const MAX_DEPTH = 3;
 const MAX_ARRAY = 50;
 const MAX_KEYS = 50;
