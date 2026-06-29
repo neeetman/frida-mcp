@@ -140,6 +140,43 @@ class SessionManager:
         iid = self.store.add_instrument(session_id, "hook", target_expr, target_expr)
         return {"instrument_id": iid, "agent_hook_id": result["id"]}
 
+    def resume(self, session_id: int) -> dict:
+        sess = self._require_live(session_id)
+        self.device.resume(sess.pid)
+        return {"resumed": sess.pid}
+
+    def kill(self, session_id: int) -> dict:
+        sess = self._require_live(session_id)
+        self.device.kill(sess.pid)
+        self.detach(session_id)
+        self.store.set_session_state(session_id, "dead")
+        return {"killed": sess.pid}
+
+    def list_modules(self, session_id: int) -> list[dict]:
+        sess = self._require_live(session_id)
+        return sess.exports.evaluate(
+            "Process.enumerateModules().map(m=>({name:m.name,"
+            "base:m.base.toString(),size:m.size}))"
+        )["items"]
+
+    def trace_api(self, session_id: int, pattern: str) -> dict:
+        sess = self._require_live(session_id)
+        result = sess.exports.trace_api(pattern)
+        self.store.add_instrument(session_id, "trace", pattern, pattern)
+        return result
+
+    def read_memory(self, session_id: int, address: str, size: int) -> dict:
+        return self._require_live(session_id).exports.read_memory(address, size)
+
+    def write_memory(self, session_id: int, address: str, hex_bytes: str) -> dict:
+        return self._require_live(session_id).exports.write_memory(address, hex_bytes)
+
+    def scan_memory(self, session_id: int, pattern: str, protection: str = "r--") -> list[dict]:
+        return self._require_live(session_id).exports.scan_memory(pattern, protection)
+
+    def disassemble(self, session_id: int, address: str, count: int = 10) -> list[dict]:
+        return self._require_live(session_id).exports.disassemble(address, count)
+
     def detach(self, session_id: int) -> None:
         sess = self.live.pop(session_id, None)
         if sess is not None:

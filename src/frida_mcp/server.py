@@ -29,9 +29,7 @@ def build_server(manager: SessionManager) -> FastMCP:
     @mcp.tool()
     def resume(session_id: int) -> dict:
         """Resume a gated/spawned process so it starts running."""
-        sess = manager._require_live(session_id)
-        manager.device.resume(sess.pid)
-        return {"resumed": sess.pid}
+        return manager.resume(session_id)
 
     @mcp.tool()
     def detach(session_id: int) -> dict:
@@ -42,19 +40,12 @@ def build_server(manager: SessionManager) -> FastMCP:
     @mcp.tool()
     def kill(session_id: int) -> dict:
         """Kill the target process of a session."""
-        sess = manager._require_live(session_id)
-        manager.device.kill(sess.pid)
-        manager.detach(session_id)
-        store.set_session_state(session_id, "dead")
-        return {"killed": sess.pid}
+        return manager.kill(session_id)
 
     @mcp.tool()
     def list_modules(session_id: int) -> list[dict]:
         """List loaded modules in the target."""
-        sess = manager._require_live(session_id)
-        return sess.exports.evaluate(
-            "Process.enumerateModules().map(m=>({name:m.name,base:m.base.toString(),size:m.size}))"
-        )["items"]  # array of serialized objects
+        return manager.list_modules(session_id)
 
     @mcp.tool()
     def eval_js(session_id: int, code: str) -> dict:
@@ -69,34 +60,27 @@ def build_server(manager: SessionManager) -> FastMCP:
     @mcp.tool()
     def trace_api(session_id: int, pattern: str) -> dict:
         """frida-trace style: hook all exports matching module!glob (e.g. kernel32!CreateFile*)."""
-        sess = manager._require_live(session_id)
-        result = sess.exports.trace_api(pattern)
-        store.add_instrument(session_id, "trace", pattern, pattern)
-        return result
+        return manager.trace_api(session_id, pattern)
 
     @mcp.tool()
     def read_memory(session_id: int, address: str, size: int) -> dict:
         """Read `size` bytes at `address` (hex string) from the live process."""
-        sess = manager._require_live(session_id)
-        return sess.exports.read_memory(address, size)
+        return manager.read_memory(session_id, address, size)
 
     @mcp.tool()
     def write_memory(session_id: int, address: str, hex_bytes: str) -> dict:
         """Write hex-encoded bytes at `address`."""
-        sess = manager._require_live(session_id)
-        return sess.exports.write_memory(address, hex_bytes)
+        return manager.write_memory(session_id, address, hex_bytes)
 
     @mcp.tool()
     def scan_memory(session_id: int, pattern: str, protection: str = "r--") -> list[dict]:
         """AOB/pattern scan over ranges with the given protection."""
-        sess = manager._require_live(session_id)
-        return sess.exports.scan_memory(pattern, protection)
+        return manager.scan_memory(session_id, pattern, protection)
 
     @mcp.tool()
     def disassemble(session_id: int, address: str, count: int = 10) -> list[dict]:
         """Disassemble `count` instructions at `address` from live memory."""
-        sess = manager._require_live(session_id)
-        return sess.exports.disassemble(address, count)
+        return manager.disassemble(session_id, address, count)
 
     @mcp.tool()
     def list_sessions() -> list[dict]:
