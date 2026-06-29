@@ -35,6 +35,27 @@ class ProjectStore:
                 type TEXT NOT NULL,
                 PRIMARY KEY (session_id, line)
             );
+            CREATE TABLE IF NOT EXISTS instruments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                kind TEXT NOT NULL,
+                target_expr TEXT NOT NULL,
+                source TEXT NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1
+            );
+            CREATE TABLE IF NOT EXISTS repl_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                code TEXT NOT NULL,
+                preview TEXT NOT NULL,
+                created_at REAL NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                text TEXT NOT NULL,
+                created_at REAL NOT NULL
+            );
             """
         )
         self.db.commit()
@@ -151,6 +172,55 @@ class ProjectStore:
                     out.append({"line": line_no, "type": event.get("type", ""),
                                 "event": event})
         return out
+
+    def add_instrument(self, session_id, kind, target_expr, source) -> int:
+        cur = self.db.execute(
+            "INSERT INTO instruments (session_id, kind, target_expr, source)"
+            " VALUES (?,?,?,?)",
+            (session_id, kind, target_expr, source),
+        )
+        self.db.commit()
+        return int(cur.lastrowid)
+
+    def list_instruments(self, session_id, active_only: bool = True) -> list[dict]:
+        sql = "SELECT * FROM instruments WHERE session_id = ?"
+        if active_only:
+            sql += " AND active = 1"
+        sql += " ORDER BY id"
+        return [dict(r) for r in self.db.execute(sql, (session_id,)).fetchall()]
+
+    def remove_instrument(self, instrument_id: int) -> None:
+        self.db.execute(
+            "UPDATE instruments SET active = 0 WHERE id = ?", (instrument_id,)
+        )
+        self.db.commit()
+
+    def add_repl(self, session_id, code, preview) -> int:
+        cur = self.db.execute(
+            "INSERT INTO repl_history (session_id, code, preview, created_at)"
+            " VALUES (?,?,?,?)",
+            (session_id, code, preview, time.time()),
+        )
+        self.db.commit()
+        return int(cur.lastrowid)
+
+    def list_repl(self, session_id) -> list[dict]:
+        return [dict(r) for r in self.db.execute(
+            "SELECT id, code, preview, created_at FROM repl_history"
+            " WHERE session_id = ? ORDER BY id", (session_id,)).fetchall()]
+
+    def add_note(self, session_id, text) -> int:
+        cur = self.db.execute(
+            "INSERT INTO notes (session_id, text, created_at) VALUES (?,?,?)",
+            (session_id, text, time.time()),
+        )
+        self.db.commit()
+        return int(cur.lastrowid)
+
+    def list_notes(self, session_id) -> list[dict]:
+        return [dict(r) for r in self.db.execute(
+            "SELECT id, text, created_at FROM notes"
+            " WHERE session_id = ? ORDER BY id", (session_id,)).fetchall()]
 
     def close(self) -> None:
         self.db.close()

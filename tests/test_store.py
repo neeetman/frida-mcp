@@ -87,3 +87,29 @@ def test_read_events_type_filter_with_pagination(tmp_path):
     # hooks are at i=0,2,4 → skip the first, take one
     page = store.read_events(sid, offset=1, limit=1, type_filter="hook")
     assert [e["event"]["i"] for e in page] == [2]
+
+
+def test_instruments_lifecycle(tmp_path):
+    store = ProjectStore(tmp_path / "proj.fmcp")
+    sid = store.create_session("t", "attach", None, None, "t")
+    iid = store.add_instrument(sid, "hook", "kernel32!CreateFileW", "src-js")
+    active = store.list_instruments(sid)
+    assert len(active) == 1
+    assert active[0]["kind"] == "hook"
+    assert active[0]["target_expr"] == "kernel32!CreateFileW"
+    assert active[0]["source"] == "src-js"
+    store.remove_instrument(iid)
+    assert store.list_instruments(sid) == []
+    assert len(store.list_instruments(sid, active_only=False)) == 1
+
+
+def test_repl_and_notes(tmp_path):
+    store = ProjectStore(tmp_path / "proj.fmcp")
+    sid = store.create_session("t", "attach", None, None, "t")
+    store.add_repl(sid, "1+1", "2")
+    store.add_repl(sid, "Process.id", "4321")
+    repl = store.list_repl(sid)
+    assert [r["code"] for r in repl] == ["1+1", "Process.id"]
+    assert repl[1]["preview"] == "4321"
+    store.add_note(sid, "found health at +0x10")
+    assert store.list_notes(sid)[0]["text"] == "found health at +0x10"
