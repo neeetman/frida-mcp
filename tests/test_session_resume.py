@@ -123,3 +123,23 @@ def test_resume_reinstalls_hook_and_trace(tmp_path):
     assert result["reinstalled"] == 2
     assert ("add_hook", "kernel32!CreateFileW") in exports.calls
     assert ("trace_api", "kernel32!Reg*") in exports.calls
+
+
+def test_resolve_program_resolves_bare_name_on_path():
+    import os
+    from frida_mcp.session import SessionManager
+    bare = "cmd.exe" if os.name == "nt" else "sh"
+    resolved = SessionManager._resolve_program(bare)
+    assert os.path.isabs(resolved)
+    assert os.path.isfile(resolved)
+    assert os.path.basename(resolved).lower() == bare.lower()
+
+
+def test_resolve_program_passes_through_paths_and_unknown_names():
+    import os
+    from frida_mcp.session import SessionManager
+    explicit = "C:\\foo\\bar.exe" if os.name == "nt" else "/foo/bar.exe"
+    assert SessionManager._resolve_program(explicit) == explicit
+    relative = ".\\foo.exe" if os.name == "nt" else "./foo.exe"
+    assert SessionManager._resolve_program(relative) == relative
+    assert SessionManager._resolve_program("no_such_binary_xyz") == "no_such_binary_xyz"

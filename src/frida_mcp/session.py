@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.resources as resources
 import os.path
+import shutil
 from dataclasses import dataclass
 
 from .store import ProjectStore
@@ -71,8 +72,15 @@ class SessionManager:
                 return sid
         return None
 
+    @staticmethod
+    def _resolve_program(program: str) -> str:
+        if os.sep in program or (os.altsep and os.altsep in program):
+            return program
+        return shutil.which(program) or program
+
     def spawn(self, program, gated: bool = True) -> dict:
         argv = program if isinstance(program, list) else [program]
+        argv = [self._resolve_program(argv[0]), *argv[1:]]
         pid = self.device.spawn(argv)
         fingerprint = process_fingerprint(self.device, pid) or os.path.basename(argv[0])
         sid = self.store.create_session(
