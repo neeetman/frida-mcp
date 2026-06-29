@@ -23,6 +23,10 @@ def process_fingerprint(device, pid: int) -> str | None:
 
 
 def is_same_process(device, pid: int, fingerprint: str) -> bool:
+    # Guards against pid reuse by a *differently*-named process. It cannot
+    # distinguish a same-named fresh instance that reused the pid (the spec's
+    # stronger start-timestamp check isn't uniformly exposed by Frida across
+    # platforms); name matching is the pragmatic cross-platform guard.
     return process_fingerprint(device, pid) == fingerprint
 
 

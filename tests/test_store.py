@@ -113,3 +113,12 @@ def test_repl_and_notes(tmp_path):
     assert repl[1]["preview"] == "4321"
     store.add_note(sid, "found health at +0x10")
     assert store.list_notes(sid)[0]["text"] == "found health at +0x10"
+
+
+def test_remove_instrument_reports_whether_it_matched(tmp_path):
+    store = ProjectStore(tmp_path / "proj.fmcp")
+    sid = store.create_session("t", "attach", None, None, "t")
+    iid = store.add_instrument(sid, "hook", "kernel32!CreateFileW", "src-js")
+    assert store.remove_instrument(iid) is True
+    assert store.remove_instrument(iid) is False  # already inactive / no row changed
+    assert store.remove_instrument(9999) is False  # unknown id

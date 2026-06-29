@@ -13,7 +13,7 @@ class ProjectStore:
         self.root = Path(path)
         (self.root / "traces").mkdir(parents=True, exist_ok=True)
         # check_same_thread=False: Frida message callbacks arrive on a background
-        # thread; _write_lock serialises all mutations so this is safe.
+        # thread; _db_lock serialises every connection access so this is safe.
         self.db = sqlite3.connect(
             self.root / "db.sqlite", check_same_thread=False
         )
@@ -30,7 +30,7 @@ class ProjectStore:
                 target TEXT NOT NULL,
                 mode TEXT NOT NULL,
                 exe_path TEXT,
-                args TEXT,
+                args TEXT NOT NULL DEFAULT '[]',
                 fingerprint TEXT NOT NULL,
                 pid INTEGER,
                 state TEXT NOT NULL DEFAULT 'alive',
@@ -161,6 +161,11 @@ class ProjectStore:
         limit: int = 100,
         type_filter: str | None = None,
     ) -> list[dict]:
+        # NOTE: this scans the JSONL file linearly to pick out the wanted lines,
+        # so a paginated read is O(file), not O(page). For very large traces,
+        # store a byte offset per line in events_index and seek to it. Deferred:
+        # it needs a migration for existing stores (the column won't be added by
+        # CREATE TABLE IF NOT EXISTS).
         with self._db_lock:
             if type_filter is None:
                 rows = self.db.execute(
@@ -206,12 +211,15 @@ class ProjectStore:
             sql += " ORDER BY id"
             return [dict(r) for r in self.db.execute(sql, (session_id,)).fetchall()]
 
-    def remove_instrument(self, instrument_id: int) -> None:  # no-op on unknown id
+    def remove_instrument(self, instrument_id: int) -> bool:
+        """Deactivate an instrument; return True iff an active row was changed."""
         with self._db_lock:
-            self.db.execute(
-                "UPDATE instruments SET active = 0 WHERE id = ?", (instrument_id,)
+            cur = self.db.execute(
+                "UPDATE instruments SET active = 0 WHERE id = ? AND active = 1",
+                (instrument_id,),
             )
             self.db.commit()
+            return cur.rowcount > 0
 
     def add_repl(self, session_id: int, code: str, preview: str) -> int:
         with self._db_lock:

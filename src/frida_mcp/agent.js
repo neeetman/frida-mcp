@@ -29,7 +29,10 @@ function describePointer(ptr) {
     }
     const sym = DebugSymbol.fromAddress(ptr);
     if (sym && sym.name) {
-      out.symbol = (sym.moduleName ? sym.moduleName + '!' : '') + sym.name;
+      // Prefer the module resolved by address; DebugSymbol.moduleName can
+      // mis-report the main module for addresses inside loaded DLLs.
+      const modName = out.module || sym.moduleName;
+      out.symbol = (modName ? modName + '!' : '') + sym.name;
     }
   } catch (e) {}
   out.preview = out.value + (out.symbol ? ' ' + out.symbol : '');
