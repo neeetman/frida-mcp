@@ -1,5 +1,14 @@
 'use strict';
 
+// Frida 17.x removed the static Module.getExportByName(mod, name) form.
+// Patch it back so resolveTarget() and inline eval strings keep working.
+if (typeof Module.getExportByName !== 'function') {
+  Module.getExportByName = function (mod, name) {
+    if (mod === null || mod === undefined) return Module.getGlobalExportByName(name);
+    return Process.getModuleByName(mod).getExportByName(name);
+  };
+}
+
 const MAX_DEPTH = 3;
 const MAX_ARRAY = 50;
 const MAX_KEYS = 50;

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
 import time
 from pathlib import Path
 
@@ -11,9 +12,14 @@ class ProjectStore:
     def __init__(self, path: str | os.PathLike) -> None:
         self.root = Path(path)
         (self.root / "traces").mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(self.root / "db.sqlite")
+        # check_same_thread=False: Frida message callbacks arrive on a background
+        # thread; _write_lock serialises all mutations so this is safe.
+        self.db = sqlite3.connect(
+            self.root / "db.sqlite", check_same_thread=False
+        )
         self.db.row_factory = sqlite3.Row
         self._line_counts: dict[int, int] = {}
+        self._write_lock = threading.Lock()
         self._create_schema()
 
     def _create_schema(self) -> None:
@@ -118,16 +124,17 @@ class ProjectStore:
         return self._line_counts[session_id]
 
     def append_event(self, session_id: int, event: dict) -> int:
-        line = self._next_line(session_id)
-        with self._trace_path(session_id).open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(event, ensure_ascii=False) + "\n")
-        self.db.execute(
-            "INSERT INTO events_index (session_id, line, type) VALUES (?,?,?)",
-            (session_id, line, str(event.get("type", ""))),
-        )
-        self.db.commit()
-        self._line_counts[session_id] = line + 1
-        return line
+        with self._write_lock:
+            line = self._next_line(session_id)
+            with self._trace_path(session_id).open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(event, ensure_ascii=False) + "\n")
+            self.db.execute(
+                "INSERT INTO events_index (session_id, line, type) VALUES (?,?,?)",
+                (session_id, line, str(event.get("type", ""))),
+            )
+            self.db.commit()
+            self._line_counts[session_id] = line + 1
+            return line
 
     def count_events(self, session_id: int, type_filter: str | None = None) -> int:
         if type_filter is None:
