@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import importlib.resources as resources
-from dataclasses import dataclass, field
+import os.path
+from dataclasses import dataclass
 
 from .store import ProjectStore
 from .values import preview_of
@@ -73,10 +74,10 @@ class SessionManager:
     def spawn(self, program, gated: bool = True) -> dict:
         argv = program if isinstance(program, list) else [program]
         pid = self.device.spawn(argv)
-        fingerprint = process_fingerprint(self.device, pid) or argv[0]
+        fingerprint = process_fingerprint(self.device, pid) or os.path.basename(argv[0])
         sid = self.store.create_session(
             target=argv[0], mode="spawn", exe_path=argv[0],
-            args=argv[1:], fingerprint=fingerprint,
+            args=argv[1:], fingerprint=fingerprint, pid=pid,
         )
         frida_session, script = self._load_script(pid)
         self.live[sid] = Session(sid, pid, frida_session, script, script.exports_sync)
@@ -88,7 +89,7 @@ class SessionManager:
         proc = self._resolve(target)
         sid = self.store.create_session(
             target=proc.name, mode="attach", exe_path=None,
-            args=None, fingerprint=proc.name,
+            args=None, fingerprint=proc.name, pid=proc.pid,
         )
         frida_session, script = self._load_script(proc.pid)
         self.live[sid] = Session(sid, proc.pid, frida_session, script, script.exports_sync)
@@ -111,13 +112,12 @@ class SessionManager:
             raise ValueError(f"no session {session_id}")
         if session_id in self.live:
             return {"session": row, "status": "already_live", "reinstalled": 0}
-        proc = self._find_by_fingerprint(row["fingerprint"])
-        if proc is None:
+        if not is_same_process(self.device, row["pid"], row["fingerprint"]):
             self.store.set_session_state(session_id, "dead")
             return {"session": self.store.get_session(session_id),
                     "status": "dead", "reinstalled": 0}
-        frida_session, script = self._load_script(proc.pid)
-        sess = Session(session_id, proc.pid, frida_session, script, script.exports_sync)
+        frida_session, script = self._load_script(row["pid"])
+        sess = Session(session_id, row["pid"], frida_session, script, script.exports_sync)
         self.live[session_id] = sess
         reinstalled = 0
         for inst in self.store.list_instruments(session_id):
@@ -127,12 +127,6 @@ class SessionManager:
         self.store.set_session_state(session_id, "alive")
         return {"session": self.store.get_session(session_id),
                 "status": "reattached", "reinstalled": reinstalled}
-
-    def _find_by_fingerprint(self, fingerprint: str):
-        for proc in self.device.enumerate_processes():
-            if proc.name == fingerprint:
-                return proc
-        return None
 
     def evaluate(self, session_id: int, code: str) -> dict:
         sess = self._require_live(session_id)

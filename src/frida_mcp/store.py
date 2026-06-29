@@ -26,6 +26,7 @@ class ProjectStore:
                 exe_path TEXT,
                 args TEXT,
                 fingerprint TEXT NOT NULL,
+                pid INTEGER,
                 state TEXT NOT NULL DEFAULT 'alive',
                 created_at REAL NOT NULL
             );
@@ -67,11 +68,12 @@ class ProjectStore:
         exe_path: str | None,
         args: list[str] | None,
         fingerprint: str,
+        pid: int | None = None,
     ) -> int:
         cur = self.db.execute(
             "INSERT INTO sessions (target, mode, exe_path, args, fingerprint,"
-            " state, created_at) VALUES (?,?,?,?,?, 'alive', ?)",
-            (target, mode, exe_path, json.dumps(args or []), fingerprint, time.time()),
+            " pid, state, created_at) VALUES (?,?,?,?,?,?, 'alive', ?)",
+            (target, mode, exe_path, json.dumps(args or []), fingerprint, pid, time.time()),
         )
         self.db.commit()
         return int(cur.lastrowid)
