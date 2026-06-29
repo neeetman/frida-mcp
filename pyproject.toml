@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "frida-mcp"
+version = "0.1.0"
+description = "Persistent, scriptable Frida dynamic instrumentation over MCP"
+requires-python = ">=3.11"
+dependencies = [
+    "frida>=16.0.0",
+    "mcp>=1.2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+frida-mcp = "frida_mcp.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+frida_mcp = ["agent.js"]
+
+[tool.pytest.ini_options]
+markers = ["live: tests that attach to a real process (require Frida + a target)"]
+addopts = "-m 'not live'"
